@@ -181,6 +181,11 @@ class GHAapp < Sinatra::Application
       path = "#{@payload['repository']['full_name']}"
       # make sure path is empty
       FileUtils.rm_rf(path)
+
+      # Use git to clone the repo.
+      # TODO this won't work for private repos!
+      # TODO Move this to use the GitHub `tree` API:
+      # https://developer.github.com/v3/git/trees/#get-a-tree
       g = Git.clone(@payload['repository']['html_url'], sha, :path => path)
       g.checkout(sha)
 
@@ -190,7 +195,8 @@ class GHAapp < Sinatra::Application
 
       # And remove the code
       FileUtils.rm_rf(path)
-      # TODO clean up empty folders
+
+      # Was this a success?
       result = r.warnings.empty? ? :success : :failure
 
       opts = {
@@ -201,6 +207,7 @@ class GHAapp < Sinatra::Application
           completed_at: Time.now.utc.iso8601
       }
 
+      # If there were warnings generated, add them to the updated check run, with details on filenames and line numbers
       if result == :failure
         output = {
             title: 'Awesome CI Warnings',
