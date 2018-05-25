@@ -109,11 +109,14 @@ class GHAapp < Sinatra::Application
 
     when :check_run
       # GH confirms our new check_run has been created, or rerequested. Update it to "running" and run the linter
+      # TODO this code does not play nice with other apps that are doing check runs! We need to check that these check runs are our own.
+      # TODO does GitHub do that for us?
       case action
       when :created
         initiate_check_run
       when :rerequested
-        initiate_check_run
+        # initiate_check_run
+        create_check_run
       end
 
     end
@@ -142,8 +145,8 @@ class GHAapp < Sinatra::Application
       result = installation_client.post("#{@payload['repository']['url']}/check-runs", {
           accept: 'application/vnd.github.antiope-preview+json', # This header is necessary for beta access to Checks API
           name: 'Awesome CI',
-          head_branch: @payload['check_suite']['head_branch'],
-          head_sha: @payload['check_suite']['head_sha']
+          head_branch: @payload['check_suite'].nil? ? @payload['check_run']['check_suite']['head_branch'] : @payload['check_suite']['head_branch'],
+          head_sha: @payload['check_suite'].nil? ? @payload['check_run']['head_sha'] : @payload['check_suite']['head_sha']
       })
 
       # Assuming that this notifcation goes through, we would start our actual build run here.
