@@ -113,10 +113,11 @@ class GHAapp < Sinatra::Application
       # TODO does GitHub do that for us?
       case action
       when :created
-        initiate_check_run
+        #TODO CHECK THAT THIS IS CORRECT.
+        initiate_check_run if @payload['check_run']['app']['id'] == APP_IDENTIFIER
       when :rerequested
         # initiate_check_run
-        create_check_run
+        create_check_run if @payload['check_run']['app']['id'] == APP_IDENTIFIER
       end
 
     end
@@ -144,14 +145,16 @@ class GHAapp < Sinatra::Application
       # https://developer.github.com/v3/checks/runs/#create-a-check-run
       result = installation_client.post("#{@payload['repository']['url']}/check-runs", {
           accept: 'application/vnd.github.antiope-preview+json', # This header is necessary for beta access to Checks API
-          name: 'Awesome CI',
+          name: 'Excellent CI',
+          # The information we need should probably be pulled from persistent storage, but we can
+          # use the event that triggered the run creation. However, the structure differs depending on whether
+          # it was a check run or a check suite event that trigged this call.
           head_branch: @payload['check_suite'].nil? ? @payload['check_run']['check_suite']['head_branch'] : @payload['check_suite']['head_branch'],
           head_sha: @payload['check_suite'].nil? ? @payload['check_run']['head_sha'] : @payload['check_suite']['head_sha']
       })
 
-      # Assuming that this notifcation goes through, we would start our actual build run here.
-      # To simulate this, we'll wait for GitHub to acknowldge the creation of the run, and update its status to
-      # "success" from there.
+      # We've now requested the creation of a check run from GitHub. We will wait until we get a confirmation
+      # from GitHub, and then kick off our CI process from there.
 
       result.attrs
     end
@@ -160,17 +163,18 @@ class GHAapp < Sinatra::Application
     def initiate_check_run
       token = get_installation_token
       installation_client = Octokit::Client.new(bearer_token: token)
-      # Update the check run to a success state. We could include other information like line numbers, comments,
-      # or other things to help in the case of failure
-      # Also, normally, we would make this call when we were actually done with our CI, not as an artificial
-      # side effect of a check run being initiated.
+
+      # This method is called in response to GitHub acknowledging our request to create a check run.
+      # We'll first update the check run to "in progress"
+      # Then we'll run our CI process
+      # Then we'll update the check run to "completed" with the CI results.
 
       # Octokit doesn't yet support the Checks API, but it does provide generic HTTP methods we can use!
       # https://developer.github.com/v3/checks/runs/#update-a-check-run
       # notice the verb! PATCH!
       result = installation_client.patch(@payload['check_run']['url'], {
           accept: 'application/vnd.github.antiope-preview+json', # This header is necessary for beta access to Checks API
-          name: 'Awesome CI',
+          name: 'Excellent CI',
           status: :in_progress
       })
 
@@ -204,7 +208,7 @@ class GHAapp < Sinatra::Application
 
       opts = {
           accept: 'application/vnd.github.antiope-preview+json', # This header is necessary for beta access to Checks API
-          name: 'Awesome CI',
+          name: 'Excellent CI',
           status: :completed,
           conclusion: result,
           completed_at: Time.now.utc.iso8601
@@ -213,7 +217,7 @@ class GHAapp < Sinatra::Application
       # If there were warnings generated, add them to the updated check run, with details on filenames and line numbers
       if result == :failure
         output = {
-            title: 'Awesome CI Warnings',
+            title: 'Excellent CI Warnings',
             summary: 'There were problems with the submitted code',
             annotations: []
         }
